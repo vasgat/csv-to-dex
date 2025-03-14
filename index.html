@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="icon" type="image/png" href="exchange.png">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV to JSON Converter</title>
+</head>
+
+<body>
+    <main>
+        <div class="container mt-4">
+            <div class="row">
+                <h2>CSVtoDEX</h2>
+                <p>This tool can help you convert a spreadsheet compatible data format (.csv) with the SC-DEX core
+                    schema.</p>
+                <p>Download the template of the locations.csv from <a href="locations.csv">here</a>.</p>
+            </div>
+            <div class="row">
+                <div class="col-12">
+                    <div class="input-group mb-3">
+                        <input class="form-control" type="file" id="csvFileInput" accept=".csv">
+                        <button class="btn btn-outline-primary" onclick="convertCSVtoJSON()">Convert</button>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12">
+                    <textarea id="output" class="form-control" aria-label="With textarea"
+                        style="height: 500px;"></textarea>
+                </div>
+                <div class="row pt-4">
+                    <div class="col-12">
+                        <button class="btn btn-outline-primary me-auto" onclick="downloadJSON()">Download JSON</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script>
+        let convertedJSON = null;
+        let fileBaseName = "converted";
+
+        function convertCSVtoJSON() {
+            const fileInput = document.getElementById("csvFileInput");
+            const output = document.getElementById("output");
+
+            if (!fileInput.files.length) {
+                alert("Please select a CSV file first!");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            fileBaseName = file.name.replace(".csv", "")
+
+            reader.onload = function (e) {
+                const text = e.target.result;
+                const lines = text.split("\n");
+                const headers = lines[0].split(",");
+                let jsonArray = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                    let values = parseCSVLine(lines[i]);
+                    let obj = {};
+                    headers.forEach((header, index) => {
+                        //skip empty key-value pairs with empty values
+                        if (!values[index] || values[index].trim() === "") {
+                            return; // Skip processing this key-value pair
+                        }
+                        constructObj(header, obj, values[index])
+                    });
+                    if (Object.keys(obj).length > 0)
+                        jsonArray.push(obj);
+                }
+                convertedJSON = { [fileBaseName]: jsonArray }
+
+                output.textContent = JSON.stringify(convertedJSON, null, 2);
+            };
+
+            reader.readAsText(file);
+        }
+
+        function parseCSVLine(line) {
+            const regex = /(".*?"|[^",]+)(?=\s*,|\s*$)/g;
+            let matches = [...line.matchAll(regex)].map(match => match[1]);
+
+            return matches.map(value => {
+                if (value.startsWith('"') && value.endsWith('"')) {
+                    return value.slice(1, -1).replace(/""/g, '"'); // Handle escaped quotes
+                }
+                return value;
+            });
+        }
+
+        function constructObj(str, parentObj, data) {
+            if (str.split('.').length === 1) {
+                parentObj[str] = data;
+                return parentObj;
+            }
+
+            var curKey = str.split('.')[0];
+            if (!parentObj[curKey])
+                parentObj[curKey] = {};
+            parentObj[curKey] = constructObj(str.split('.').slice(1).join('.'), parentObj[curKey], data);
+            return parentObj;
+        }
+
+        function downloadJSON() {
+            if (!convertedJSON) {
+                alert("Please convert a CSV file first!");
+                return;
+            }
+
+            const blob = new Blob([JSON.stringify(convertedJSON, null, 2)], { type: "application/json" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `${fileBaseName}.json`;
+            a.click();
+        }
+
+    </script>
+</body>
+
+</html>
