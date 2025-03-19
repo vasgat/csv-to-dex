@@ -18,12 +18,15 @@
                 <h2>CSVtoDEX</h2>
                 <p>This tool can help you convert a spreadsheet compatible data format (.csv) with the SC-DEX core
                     schema.</p>
-                <p>Download the template of the locations.csv from <a href="locations.csv">here</a>.</p>
+                <p>Download the template of the locations.csv from <a href="locations.csv">here</a>.<br>
+                Download the template of the organizations.csv from <a href="organizations.csv">here</a>.<br>
+                Download the template of the affiliations.csv from <a href="affiliations.csv">here</a>.</p>
+                <p class="fst-italic">Note: In case of multiple location or organizational identifiers use the character "|" as separator</p>
             </div>
             <div class="row">
                 <div class="col-12">
                     <div class="input-group mb-3">
-                        <input class="form-control" type="file" id="csvFileInput" accept=".csv">
+                        <input class="form-control" type="file" id="csvFileInput" accept=".csv" multiple>
                         <button class="btn btn-outline-primary" onclick="convertCSVtoJSON()">Convert</button>
                     </div>
                 </div>
@@ -44,6 +47,7 @@
     <script>
         let convertedJSON = null;
         let fileBaseName = "converted";
+        const allowedFiles = ["locations.csv", "organizations.csv", "affiliations.csv"];
 
         function convertCSVtoJSON() {
             const fileInput = document.getElementById("csvFileInput");
@@ -54,36 +58,61 @@
                 return;
             }
 
-            const file = fileInput.files[0];
-            const reader = new FileReader();
+            const files = Array.from(fileInput.files);
+            const fileNames = files.map(f => f.name);
 
-            fileBaseName = file.name.replace(".csv", "")
+            // Ensure only allowed files are selected
+            const invalidFiles = fileNames.filter(name => !allowedFiles.includes(name));
+            if (invalidFiles.length > 0) {
+                alert(`Invalid file(s) detected: ${invalidFiles.join(", ")}\nAllowed files are: ${allowedFiles.join(", ")}`);
+                return;
+            }
 
-            reader.onload = function (e) {
-                const text = e.target.result;
-                const lines = text.split("\n");
-                const headers = lines[0].split(",");
-                let jsonArray = [];
+            // Ensure locations.csv is present
+            if (!fileNames.includes("locations.csv")) {
+                alert("You must provide 'locations.csv' at a minimum!");
+                return;
+            }
 
-                for (let i = 1; i < lines.length; i++) {
-                    let values = parseCSVLine(lines[i]);
-                    let obj = {};
-                    headers.forEach((header, index) => {
-                        //skip empty key-value pairs with empty values
-                        if (!values[index] || values[index].trim() === "") {
-                            return; // Skip processing this key-value pair
-                        }
-                        constructObj(header, obj, values[index])
-                    });
-                    if (Object.keys(obj).length > 0)
-                        jsonArray.push(obj);
-                }
-                convertedJSON = { [fileBaseName]: jsonArray }
 
-                output.textContent = JSON.stringify(convertedJSON, null, 2);
-            };
+            convertedJSON = {}; // Reset the JSON object
 
-            reader.readAsText(file);
+            let filesProcessed = 0;
+
+            files.forEach(file => {
+                const reader = new FileReader();
+                const baseName = file.name.replace(".csv", ""); // Extract file base name
+
+                reader.onload = function (e) {
+                    const text = e.target.result;
+                    const lines = text.split("\n").filter(line => line.trim() !== ""); // Remove empty lines
+                    const headers = lines[0].split(",");
+
+                    let jsonArray = [];
+
+                    for (let i = 1; i < lines.length; i++) {
+                        let values = parseCSVLine(lines[i]);
+                        let obj = {};
+
+                        headers.forEach((header, index) => {
+                            if (!values[index] || values[index].trim() === "") return;
+                            constructObj(header, obj, values[index]);
+                        });
+
+                        if (Object.keys(obj).length > 0) jsonArray.push(obj);
+                    }
+
+                    convertedJSON[baseName] = jsonArray;
+                    filesProcessed++;
+
+                    // Once all files are processed, display JSON output
+                    if (filesProcessed === files.length) {
+                        output.textContent = JSON.stringify(convertedJSON, null, 2);
+                    }
+                };
+
+                reader.readAsText(file);
+            });
         }
 
         function parseCSVLine(line) {
@@ -99,15 +128,20 @@
         }
 
         function constructObj(str, parentObj, data) {
+            // Convert to array if the separator exists
+            let processedData = data.includes("|")
+                ? data.split("|").map(item => item.trim()) // Convert to array
+                : data.trim(); // Keep as string if no separator
+
             if (str.split('.').length === 1) {
-                parentObj[str] = data;
+                parentObj[str.trim()] = processedData;
                 return parentObj;
             }
 
-            var curKey = str.split('.')[0];
+            var curKey = str.trim().split('.')[0];
             if (!parentObj[curKey])
                 parentObj[curKey] = {};
-            parentObj[curKey] = constructObj(str.split('.').slice(1).join('.'), parentObj[curKey], data);
+            parentObj[curKey] = constructObj(str.split('.').slice(1).join('.'), parentObj[curKey], processedData);
             return parentObj;
         }
 
